@@ -1,0 +1,108 @@
+_schema-version: "3.1"
+ID: RiskManagement
+description: A simple CAP project.
+version: 1.0.0
+modules:
+  - name: RiskManagement-srv
+    type: nodejs
+    path: gen/srv
+    requires:
+      - name: RiskManagement-db
+      - name: RiskManagement-auth
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: ${default-url}
+    parameters:
+      buildpack: nodejs_buildpack
+      readiness-health-check-http-endpoint: /health
+      readiness-health-check-type: http
+    build-parameters:
+      builder: npm
+  - name: RiskManagement-db-deployer
+    type: hdb
+    path: gen/db
+    requires:
+      - name: RiskManagement-db
+    parameters:
+      buildpack: nodejs_buildpack
+  - name: RiskManagement-destination-content
+    type: com.sap.application.content
+    requires:
+      - name: RiskManagement-destination-service
+        parameters:
+          content-target: true
+      - name: RiskManagement_html_repo_host
+        parameters:
+          service-key:
+            name: RiskManagement_html_repo_host-key
+      - name: RiskManagement-auth
+        parameters:
+          service-key:
+            name: RiskManagement-auth-key
+    parameters:
+      content:
+        instance:
+          destinations:
+            - Name: riskmanagement_RiskManagement_html_repo_host
+              ServiceInstanceName: RiskManagement-html5-app-host-service
+              ServiceKeyName: RiskManagement_html_repo_host-key
+              sap.cloud.service: riskmanagement
+            - Authentication: OAuth2UserTokenExchange
+              Name: riskmanagement_RiskManagement_auth
+              ServiceInstanceName: RiskManagement-auth
+              ServiceKeyName: RiskManagement-auth-key
+              sap.cloud.service: riskmanagement
+          existing_destinations_policy: ignore
+    build-parameters:
+      no-source: true
+resources:
+  - name: RiskManagement-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+  - name: RiskManagement-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      config:
+        tenant-mode: dedicated
+        xsappname: RiskManagement-${org}-${space}
+      path: ./xs-security.json
+      service: xsuaa
+      service-plan: application
+  - name: RiskManagement-destination-service
+    type: org.cloudfoundry.managed-service
+    parameters:
+      config:
+        HTML5Runtime_enabled: true
+        version: 1.0.0
+      service: destination
+      service-name: RiskManagement-destination-service
+      service-plan: lite
+  - name: RiskManagement_html_repo_host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-name: RiskManagement-html5-app-host-service
+      service-plan: app-host
+  - name: RiskManagement-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+     service: destination
+     service-plan: lite
+     config:
+       HTML5Runtime_enabled: true
+  - name: RiskManagement-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+     service: html5-apps-repo
+     service-plan: app-host
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
